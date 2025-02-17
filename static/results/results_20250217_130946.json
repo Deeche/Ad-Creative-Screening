@@ -1,0 +1,22 @@
+[
+  {
+    "filename": "2024-06-08_203248.png",
+    "path": "static/uploads/2024-06-08_203248.png",
+    "analysis": {
+      "text": "Case_ブリント生成 追加 scro いつ一 コリント生虚 ボティ避沢 り川したち 」ーワーになどちえに』 [川aはトリラフィックパ」なします: クラフィック生成 7成こnたデ タに バディにフリントすろことも可嵐てす:",
+      "risk_score": 51.55706253641533,
+      "image_features": {
+        "has_text": true,
+        "width": 610,
+        "height": 424,
+        "format": "PNG"
+      }
+    },
+    "review": {
+      "judgement": "保留",
+      "reason": "要確認項目が見つかりました",
+      "risk_score": 51.55706253641533,
+      "violations": []
+    }
+  }
+]
