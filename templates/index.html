@@ -287,7 +287,8 @@
                 if (data.results_file) {
                     downloadCsvBtn.disabled = false;
                     downloadCsvBtn.onclick = () => {
-                        const timestamp = data.results_file.split('_').pop().split('.')[0];
+                        const filename = data.results_file.split('/').pop();
+                        const timestamp = filename.replace('results_', '').replace('.json', '');
                         window.location.href = `/download_csv/${timestamp}`;
                     };
                 }

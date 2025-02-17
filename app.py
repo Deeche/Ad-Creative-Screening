@@ -92,35 +92,52 @@ def get_results():
 
 @app.route('/download_csv/<timestamp>')
 def download_csv(timestamp):
+    # JSONファイルのパスを構築
     json_file = os.path.join(RESULTS_FOLDER, f'results_{timestamp}.json')
     if not os.path.exists(json_file):
-        return jsonify({'error': 'Results file not found'}), 404
+        print(f"File not found: {json_file}")  # デバッグ用ログ
+        return jsonify({'error': 'Results file not found', 'path': json_file}), 404
     
-    with open(json_file, 'r', encoding='utf-8') as f:
-        results = json.load(f)
-    
-    # 結果をDataFrameに変換
-    data = []
-    for result in results:
-        data.append({
-            'image_name': result['filename'],
-            'judgement': result['review']['judgement'],
-            'reason': result['review']['reason'],
-            'risk_score': result['review']['risk_score']
-        })
-    
-    df = pd.DataFrame(data)
-    
-    # CSVファイルを作成
-    csv_file = os.path.join(RESULTS_FOLDER, f'results_{timestamp}.csv')
-    df.to_csv(csv_file, index=False, encoding='utf-8-sig')
-    
-    return send_file(
-        csv_file,
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=f'ad_review_results_{timestamp}.csv'
-    )
+    try:
+        # JSONファイルを読み込む
+        with open(json_file, 'r', encoding='utf-8') as f:
+            results = json.load(f)
+        
+        # 結果をDataFrameに変換
+        data = []
+        for result in results:
+            data.append({
+                'image_name': result['filename'],
+                'judgement': result['review']['judgement'],
+                'reason': result['review']['reason'],
+                'risk_score': result['review']['risk_score'],
+                'violations': ', '.join(result['review']['violations']) if result['review']['violations'] else '-'
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # CSVファイルを作成
+        csv_file = os.path.join(RESULTS_FOLDER, f'results_{timestamp}.csv')
+        df.to_csv(csv_file, index=False, encoding='utf-8-sig')
+        
+        # 集計情報を追加
+        summary = df['judgement'].value_counts()
+        with open(csv_file, 'a', encoding='utf-8-sig') as f:
+            f.write('\n\n審査結果集計\n')
+            f.write(f'承認: {summary.get("承認", 0)}件\n')
+            f.write(f'保留: {summary.get("保留", 0)}件\n')
+            f.write(f'却下: {summary.get("却下", 0)}件\n')
+            f.write(f'合計: {len(df)}件\n')
+        
+        return send_file(
+            csv_file,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'ad_review_results_{timestamp}.csv'
+        )
+    except Exception as e:
+        print(f"Error in download_csv: {e}")  # デバッグ用ログ
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
