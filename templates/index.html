@@ -68,10 +68,20 @@
                 <div class="drag-drop-area" id="dropZone">
                     <p class="mb-2">ここに画像ファイルをドラッグ＆ドロップ</p>
                     <p class="mb-2">または</p>
-                    <input type="file" id="fileInput" multiple accept="image/*" class="d-none">
-                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                        ファイルを選択
-                    </button>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <div>
+                            <input type="file" id="fileInput" multiple accept="image/*" class="d-none">
+                            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                                ファイルを選択
+                            </button>
+                        </div>
+                        <div>
+                            <input type="file" id="folderInput" webkitdirectory directory multiple class="d-none">
+                            <button class="btn btn-secondary" onclick="document.getElementById('folderInput').click()">
+                                フォルダを選択
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 
                 <div id="uploadProgress" class="progress mb-3 d-none">
@@ -118,6 +128,7 @@
     <script>
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
         const previewArea = document.getElementById('previewArea');
         const resultsTable = document.getElementById('resultsTable');
         const downloadCsvBtn = document.getElementById('downloadCsv');
@@ -152,17 +163,72 @@
 
         dropZone.addEventListener('drop', handleDrop, false);
         fileInput.addEventListener('change', handleFiles, false);
+        folderInput.addEventListener('change', handleFiles, false);
 
         function handleDrop(e) {
             const dt = e.dataTransfer;
-            const files = dt.files;
-            handleFiles({ target: { files: files } });
+            const items = dt.items;
+            
+            if (items) {
+                // DataTransferItemListを使用してフォルダをハンドリング
+                const files = [];
+                let remainingItems = items.length;
+                
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.kind === 'file') {
+                        const entry = item.webkitGetAsEntry();
+                        if (entry) {
+                            traverseFileTree(entry, files, () => {
+                                remainingItems--;
+                                if (remainingItems === 0) {
+                                    processFiles(files);
+                                }
+                            });
+                        }
+                    }
+                }
+            } else {
+                // 通常のファイルドロップとして処理
+                handleFiles({ target: { files: dt.files } });
+            }
+        }
+
+        function traverseFileTree(item, files, callback) {
+            if (item.isFile) {
+                item.file(file => {
+                    if (file.type.startsWith('image/')) {
+                        files.push(file);
+                    }
+                    callback();
+                });
+            } else if (item.isDirectory) {
+                const dirReader = item.createReader();
+                dirReader.readEntries(entries => {
+                    let remainingEntries = entries.length;
+                    if (remainingEntries === 0) {
+                        callback();
+                    }
+                    entries.forEach(entry => {
+                        traverseFileTree(entry, files, () => {
+                            remainingEntries--;
+                            if (remainingEntries === 0) {
+                                callback();
+                            }
+                        });
+                    });
+                });
+            }
         }
 
         function handleFiles(e) {
-            const files = [...e.target.files];
+            const files = [...e.target.files].filter(file => file.type.startsWith('image/'));
             if (files.length === 0) return;
 
+            processFiles(files);
+        }
+
+        function processFiles(files) {
             // プレビューエリアとテーブルをクリア
             previewArea.innerHTML = '';
             resultsTable.innerHTML = '';
@@ -172,13 +238,20 @@
             uploadProgress.classList.remove('d-none');
             uploadProgress.querySelector('.progress-bar').style.width = '0%';
 
+            // ファイル数を表示
+            const totalFiles = files.length;
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'alert alert-info mt-3';
+            statusDiv.innerHTML = `処理対象: ${totalFiles}個の画像ファイル`;
+            previewArea.parentElement.insertBefore(statusDiv, previewArea);
+
             const formData = new FormData();
             files.forEach(file => {
                 formData.append('files[]', file);
                 addPreview(file);
             });
 
-            uploadFiles(formData);
+            uploadFiles(formData, totalFiles);
         }
 
         function addPreview(file) {
@@ -196,7 +269,7 @@
             reader.readAsDataURL(file);
         }
 
-        async function uploadFiles(formData) {
+        async function uploadFiles(formData, totalFiles) {
             try {
                 loadingOverlay.style.display = 'flex';
                 const response = await fetch('/upload', {
@@ -218,6 +291,12 @@
                         window.location.href = `/download_csv/${timestamp}`;
                     };
                 }
+
+                // 処理完了メッセージを表示
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'alert alert-success mt-3';
+                statusDiv.innerHTML = `処理完了: ${data.files.length}個の画像を審査しました`;
+                previewArea.parentElement.insertBefore(statusDiv, previewArea);
             } catch (error) {
                 console.error('Error:', error);
                 alert('アップロードに失敗しました。');
@@ -231,6 +310,26 @@
             resultsTable.innerHTML = '';
             const previews = previewArea.querySelectorAll('.preview-card');
 
+            // 結果の概要を計算
+            const summary = files.reduce((acc, file) => {
+                acc[file.review.judgement] = (acc[file.review.judgement] || 0) + 1;
+                return acc;
+            }, {});
+
+            // 概要行を追加
+            const summaryRow = resultsTable.insertRow();
+            summaryRow.className = 'table-info';
+            summaryRow.innerHTML = `
+                <td colspan="5">
+                    <strong>審査結果概要:</strong>
+                    承認: ${summary['承認'] || 0}件,
+                    保留: ${summary['保留'] || 0}件,
+                    却下: ${summary['却下'] || 0}件
+                    （全${files.length}件）
+                </td>
+            `;
+
+            // 個別の結果を表示
             files.forEach((file, index) => {
                 const row = resultsTable.insertRow();
                 row.innerHTML = `
