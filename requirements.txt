@@ -1,0 +1,8 @@
+flask
+flask-cors
+pillow
+python-dotenv
+langchain
+easyocr
+pandas
+numpy
