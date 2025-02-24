@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ガイドラインドキュメント管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .document-list {
+            height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        .editor {
+            height: calc(100vh - 200px);
+        }
+        .editor textarea {
+            height: 100%;
+            font-family: monospace;
+        }
+        .category-header {
+            cursor: pointer;
+            padding: 10px;
+            background-color: #f8f9fa;
+            margin-bottom: 5px;
+        }
+        .document-item {
+            cursor: pointer;
+            padding: 5px 20px;
+        }
+        .document-item:hover {
+            background-color: #e9ecef;
+        }
+        .selected {
+            background-color: #cfe2ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <h1 class="mb-4">ガイドラインドキュメント管理</h1>
+        
+        <div class="row">
+            <!-- ドキュメントリスト -->
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">ドキュメント一覧</h5>
+                        <button class="btn btn-primary btn-sm" onclick="showCreateModal()">新規作成</button>
+                    </div>
+                    <div class="card-body document-list" id="documentList">
+                        <!-- ドキュメントリストがここに動的に追加されます -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- エディタ -->
+            <div class="col-md-9">
+                <div class="card editor">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0" id="currentDocument">ドキュメントを選択してください</h5>
+                        <div>
+                            <button class="btn btn-success" onclick="saveDocument()" id="saveButton" disabled>保存</button>
+                            <button class="btn btn-danger ms-2" onclick="deleteDocument()" id="deleteButton" disabled>削除</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <textarea class="form-control" id="editor" disabled></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新規作成モーダル -->
+    <div class="modal fade" id="createModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新規ドキュメント作成</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">カテゴリ</label>
+                        <select class="form-select" id="categorySelect">
+                            <option value="guidelines">ガイドライン</option>
+                            <option value="examples">事例</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">サブカテゴリ</label>
+                        <select class="form-select" id="subcategorySelect">
+                            <!-- サブカテゴリはカテゴリ選択に応じて動的に変更 -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ファイル名</label>
+                        <input type="text" class="form-control" id="newFileName" placeholder="例：guideline.txt">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" onclick="createDocument()">作成</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentDocPath = null;
+        let documents = [];
+        const createModal = new bootstrap.Modal(document.getElementById('createModal'));
+
+        // カテゴリ選択の変更時の処理
+        document.getElementById('categorySelect').addEventListener('change', function() {
+            const subcategorySelect = document.getElementById('subcategorySelect');
+            subcategorySelect.innerHTML = '';
+            
+            if (this.value === 'guidelines') {
+                subcategorySelect.innerHTML = '<option value="">なし</option>';
+            } else if (this.value === 'examples') {
+                subcategorySelect.innerHTML = `
+                    <option value="violations">違反事例</option>
+                    <option value="compliant">適切な事例</option>
+                `;
+            }
+        });
+
+        // ドキュメント一覧の取得と表示
+        async function loadDocuments() {
+            try {
+                const response = await fetch('/api/documents');
+                documents = await response.json();
+                
+                // カテゴリごとにグループ化
+                const grouped = documents.reduce((acc, doc) => {
+                    if (!acc[doc.category]) {
+                        acc[doc.category] = [];
+                    }
+                    acc[doc.category].push(doc);
+                    return acc;
+                }, {});
+
+                const documentList = document.getElementById('documentList');
+                documentList.innerHTML = '';
+
+                // カテゴリごとにドキュメントを表示
+                Object.entries(grouped).forEach(([category, docs]) => {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.innerHTML = `
+                        <div class="category-header">
+                            <strong>${category}</strong>
+                        </div>
+                        <div class="category-items">
+                            ${docs.map(doc => `
+                                <div class="document-item" onclick="loadDocument('${doc.path}')">
+                                    ${doc.name}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    documentList.appendChild(categoryDiv);
+                });
+            } catch (error) {
+                console.error('Error loading documents:', error);
+                alert('ドキュメント一覧の取得に失敗しました');
+            }
+        }
+
+        // 特定のドキュメントを読み込む
+        async function loadDocument(path) {
+            try {
+                const response = await fetch(`/api/documents/${path}`);
+                const data = await response.json();
+                
+                document.getElementById('editor').value = data.content;
+                document.getElementById('editor').disabled = false;
+                document.getElementById('currentDocument').textContent = path;
+                document.getElementById('saveButton').disabled = false;
+                document.getElementById('deleteButton').disabled = false;
+                
+                currentDocPath = path;
+
+                // 選択状態の更新
+                document.querySelectorAll('.document-item').forEach(item => {
+                    item.classList.remove('selected');
+                    if (item.textContent.trim() === path.split('/').pop()) {
+                        item.classList.add('selected');
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading document:', error);
+                alert('ドキュメントの読み込みに失敗しました');
+            }
+        }
+
+        // ドキュメントの保存
+        async function saveDocument() {
+            if (!currentDocPath) return;
+
+            try {
+                const content = document.getElementById('editor').value;
+                const response = await fetch(`/api/documents/${currentDocPath}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ content })
+                });
+
+                if (response.ok) {
+                    alert('保存しました');
+                } else {
+                    throw new Error('保存に失敗しました');
+                }
+            } catch (error) {
+                console.error('Error saving document:', error);
+                alert('ドキュメントの保存に失敗しました');
+            }
+        }
+
+        // ドキュメントの削除
+        async function deleteDocument() {
+            if (!currentDocPath || !confirm('本当に削除しますか？')) return;
+
+            try {
+                const response = await fetch(`/api/documents/${currentDocPath}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    document.getElementById('editor').value = '';
+                    document.getElementById('editor').disabled = true;
+                    document.getElementById('currentDocument').textContent = 'ドキュメントを選択してください';
+                    document.getElementById('saveButton').disabled = true;
+                    document.getElementById('deleteButton').disabled = true;
+                    currentDocPath = null;
+                    await loadDocuments();
+                } else {
+                    throw new Error('削除に失敗しました');
+                }
+            } catch (error) {
+                console.error('Error deleting document:', error);
+                alert('ドキュメントの削除に失敗しました');
+            }
+        }
+
+        // 新規作成モーダルの表示
+        function showCreateModal() {
+            document.getElementById('categorySelect').dispatchEvent(new Event('change'));
+            createModal.show();
+        }
+
+        // 新規ドキュメントの作成
+        async function createDocument() {
+            const category = document.getElementById('categorySelect').value;
+            const subcategory = document.getElementById('subcategorySelect').value;
+            const name = document.getElementById('newFileName').value;
+
+            if (!name) {
+                alert('ファイル名を入力してください');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/documents', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        category,
+                        subcategory,
+                        name,
+                        content: ''
+                    })
+                });
+
+                if (response.ok) {
+                    createModal.hide();
+                    await loadDocuments();
+                    const data = await response.json();
+                    loadDocument(data.path);
+                } else {
+                    throw new Error('作成に失敗しました');
+                }
+            } catch (error) {
+                console.error('Error creating document:', error);
+                alert('ドキュメントの作成に失敗しました');
+            }
+        }
+
+        // 初期読み込み
+        loadDocuments();
+    </script>
+</body>
+</html> 

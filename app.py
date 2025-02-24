@@ -5,6 +5,7 @@ import logging
 from werkzeug.utils import secure_filename
 from backend.image_analyzer import ImageAnalyzer
 from backend.ad_reviewer import AdReviewer
+from backend.document_manager import DocumentManager
 import json
 import pandas as pd
 from datetime import datetime
@@ -25,6 +26,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 image_analyzer = ImageAnalyzer()
 ad_reviewer = AdReviewer()
+document_manager = DocumentManager()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -32,6 +34,10 @@ def allowed_file(filename):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/documents')
+def documents():
+    return render_template('documents.html')
 
 def save_file(file, upload_dir):
     try:
@@ -211,6 +217,74 @@ def get_guidelines():
         ]
         return jsonify(guidelines)
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/documents', methods=['GET'])
+def get_documents():
+    """ドキュメント一覧を取得"""
+    try:
+        documents = document_manager.get_document_list()
+        return jsonify(documents)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/documents/<path:doc_path>', methods=['GET'])
+def get_document(doc_path):
+    """特定のドキュメントの内容を取得"""
+    try:
+        content = document_manager.get_document_content(doc_path)
+        if content is None:
+            return jsonify({'error': 'Document not found'}), 404
+        return jsonify({'content': content})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/documents/<path:doc_path>', methods=['PUT'])
+def update_document(doc_path):
+    """ドキュメントを更新"""
+    try:
+        data = request.get_json()
+        if not data or 'content' not in data:
+            return jsonify({'error': 'Content is required'}), 400
+        
+        if document_manager.save_document(doc_path, data['content']):
+            return jsonify({'message': 'Document updated successfully'})
+        return jsonify({'error': 'Failed to update document'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/documents', methods=['POST'])
+def create_document():
+    """新規ドキュメントを作成"""
+    try:
+        data = request.get_json()
+        if not data or 'name' not in data or 'category' not in data:
+            return jsonify({'error': 'Name and category are required'}), 400
+        
+        doc_path = document_manager.create_document(
+            data['category'],
+            data.get('subcategory'),
+            data['name'],
+            data.get('content', '')
+        )
+        
+        if doc_path:
+            return jsonify({
+                'message': 'Document created successfully',
+                'path': doc_path
+            })
+        return jsonify({'error': 'Failed to create document'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/documents/<path:doc_path>', methods=['DELETE'])
+def delete_document(doc_path):
+    """ドキュメントを削除"""
+    try:
+        if document_manager.delete_document(doc_path):
+            return jsonify({'message': 'Document deleted successfully'})
+        return jsonify({'error': 'Failed to delete document'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
