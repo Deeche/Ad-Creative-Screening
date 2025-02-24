@@ -169,3 +169,18 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Application specific
+data/chroma_db/
+static/uploads/
+static/results/
+*.db
+*.sqlite
+*.sqlite3
+
+# Model files and embeddings
+*.bin
+*.pt
+*.pth
+*.onnx
+*.model
