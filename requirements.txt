@@ -6,3 +6,8 @@ langchain
 easyocr
 pandas
 numpy
+chromadb
+langchain-community
+langchain-core
+sentence-transformers
+pydantic
