@@ -180,15 +180,44 @@ def download_csv(timestamp):
         logger.error(f'Error in download_csv: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/review', methods=['POST'])
+def review_ad():
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({'error': '広告テキストが提供されていません'}), 400
+
+        # 広告の審査を実行
+        result = ad_reviewer.review_ad({
+            'text': data['text'],
+            'risk_score': data.get('risk_score', 50)
+        })
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/guidelines', methods=['GET'])
+def get_guidelines():
+    try:
+        # 現在のガイドラインを取得
+        guidelines = [
+            "広告には暴力的な表現を含めることはできません。",
+            "医薬品の効能・効果の表現には制限があります。",
+            "個人情報の取り扱いには十分な注意が必要です。",
+            "景品表示法に違反する誇大な表現は禁止されています。",
+            "著作権を侵害するコンテンツは使用できません。"
+        ]
+        return jsonify(guidelines)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    os.makedirs(RESULTS_FOLDER, exist_ok=True)
+    # 必要なディレクトリの作成
+    os.makedirs('static/uploads', exist_ok=True)
+    os.makedirs('static/results', exist_ok=True)
+    os.makedirs('data/chroma_db', exist_ok=True)
     
-    import torch
-    if torch.cuda.is_available():
-        logger.info(f'GPU available: {torch.cuda.get_device_name(0)}')
-        logger.info(f'GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**2:.0f}MB')
-    else:
-        logger.warning('No GPU available, using CPU')
-    
-    app.run(host='0.0.0.0', port=51473, debug=True)
+    app.run(host='0.0.0.0', port=51473, debug=False)

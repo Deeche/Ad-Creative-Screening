@@ -13,7 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリケーションコードをコピー
 COPY backend/ backend/
+COPY templates/ templates/
+COPY static/ static/
 COPY app.py .
 
 # テスト実行用のコマンド
-CMD ["python", "-m", "unittest", "backend/test_rag_system.py", "-v"] 
+CMD ["python", "app.py"] 

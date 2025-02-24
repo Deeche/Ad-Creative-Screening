@@ -3,361 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>広告バナー画像審査システム</title>
+    <title>広告クリエイティブ審査システム</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .drag-drop-area {
-            border: 2px dashed #ccc;
-            border-radius: 5px;
-            padding: 20px;
-            text-align: center;
-            background: #f8f9fa;
-            cursor: pointer;
-            margin-bottom: 20px;
-        }
-        .drag-drop-area.dragover {
-            background: #e9ecef;
-            border-color: #0d6efd;
-        }
-        .preview-area {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .preview-card {
-            width: 200px;
-            margin-bottom: 10px;
-        }
-        .preview-image {
-            width: 100%;
-            height: 150px;
-            object-fit: contain;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .status-badge {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.8em;
-        }
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
+        .result-card {
+            margin-top: 20px;
             display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
+        }
+        .guidelines-section {
+            margin-top: 20px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
-    <div class="container mt-4">
-        <h1 class="mb-4">広告バナー画像審査システム</h1>
+    <div class="container mt-5">
+        <h1 class="mb-4">広告クリエイティブ審査システム</h1>
         
-        <div class="card mb-4">
+        <!-- ガイドライン表示セクション -->
+        <div class="guidelines-section">
+            <h3>現在の審査ガイドライン</h3>
+            <ul id="guidelines-list" class="list-group">
+                <!-- ガイドラインがここに動的に追加されます -->
+            </ul>
+        </div>
+
+        <!-- 広告入力フォーム -->
+        <div class="card">
             <div class="card-body">
-                <h5 class="card-title">画像アップロード</h5>
-                <div class="drag-drop-area" id="dropZone">
-                    <p class="mb-2">ここに画像ファイルをドラッグ＆ドロップ</p>
-                    <p class="mb-2">または</p>
-                    <div class="d-flex gap-2 justify-content-center">
-                        <div>
-                            <input type="file" id="fileInput" multiple accept="image/*" class="d-none">
-                            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                                ファイルを選択
-                            </button>
-                        </div>
-                        <div>
-                            <input type="file" id="folderInput" webkitdirectory directory multiple class="d-none">
-                            <button class="btn btn-secondary" onclick="document.getElementById('folderInput').click()">
-                                フォルダを選択
-                            </button>
-                        </div>
-                    </div>
+                <h5 class="card-title">広告テキストの入力</h5>
+                <div class="form-group">
+                    <textarea id="adText" class="form-control" rows="4" placeholder="ここに広告テキストを入力してください"></textarea>
                 </div>
-                
-                <div id="uploadProgress" class="progress mb-3 d-none">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" style="width: 0%"></div>
-                </div>
-                
-                <div id="previewArea" class="preview-area"></div>
+                <button id="submitBtn" class="btn btn-primary mt-3">審査開始</button>
             </div>
         </div>
 
-        <div class="card mb-4">
+        <!-- 結果表示カード -->
+        <div id="resultCard" class="card result-card">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="card-title mb-0">審査結果</h5>
-                    <button id="downloadCsv" class="btn btn-success" disabled>
-                        CSVダウンロード
-                    </button>
+                <h5 class="card-title">審査結果</h5>
+                <div class="alert" id="judgementAlert" role="alert">
+                    <strong>判定：</strong> <span id="judgement"></span>
                 </div>
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>ファイル名</th>
-                                <th>判定</th>
-                                <th>理由</th>
-                                <th>危険度スコア</th>
-                                <th>違反項目</th>
-                            </tr>
-                        </thead>
-                        <tbody id="resultsTable"></tbody>
-                    </table>
+                <p><strong>理由：</strong> <span id="reason"></span></p>
+                <p><strong>リスクスコア：</strong> <span id="riskScore"></span></p>
+                
+                <!-- 違反項目リスト -->
+                <div id="violationsSection" style="display: none;">
+                    <h6>違反項目：</h6>
+                    <ul id="violationsList" class="list-group">
+                    </ul>
+                </div>
+
+                <!-- 関連ガイドライン -->
+                <div id="guidelinesSection" class="mt-3">
+                    <h6>関連するガイドライン：</h6>
+                    <ul id="relevantGuidelines" class="list-group">
+                    </ul>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-    </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const folderInput = document.getElementById('folderInput');
-        const previewArea = document.getElementById('previewArea');
-        const resultsTable = document.getElementById('resultsTable');
-        const downloadCsvBtn = document.getElementById('downloadCsv');
-        const uploadProgress = document.getElementById('uploadProgress');
-        const loadingOverlay = document.getElementById('loadingOverlay');
-
-        // ドラッグ&ドロップイベントの処理
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, preventDefaults, false);
-        });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, highlight, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, unhighlight, false);
-        });
-
-        function highlight(e) {
-            dropZone.classList.add('dragover');
-        }
-
-        function unhighlight(e) {
-            dropZone.classList.remove('dragover');
-        }
-
-        dropZone.addEventListener('drop', handleDrop, false);
-        fileInput.addEventListener('change', handleFiles, false);
-        folderInput.addEventListener('change', handleFiles, false);
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const items = dt.items;
-            
-            if (items) {
-                // DataTransferItemListを使用してフォルダをハンドリング
-                const files = [];
-                let remainingItems = items.length;
-                
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    if (item.kind === 'file') {
-                        const entry = item.webkitGetAsEntry();
-                        if (entry) {
-                            traverseFileTree(entry, files, () => {
-                                remainingItems--;
-                                if (remainingItems === 0) {
-                                    processFiles(files);
-                                }
-                            });
-                        }
-                    }
-                }
-            } else {
-                // 通常のファイルドロップとして処理
-                handleFiles({ target: { files: dt.files } });
-            }
-        }
-
-        function traverseFileTree(item, files, callback) {
-            if (item.isFile) {
-                item.file(file => {
-                    if (file.type.startsWith('image/')) {
-                        files.push(file);
-                    }
-                    callback();
+        // ガイドラインの取得と表示
+        fetch('/api/guidelines')
+            .then(response => response.json())
+            .then(guidelines => {
+                const guidelinesList = document.getElementById('guidelines-list');
+                guidelines.forEach(guideline => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item';
+                    li.textContent = guideline;
+                    guidelinesList.appendChild(li);
                 });
-            } else if (item.isDirectory) {
-                const dirReader = item.createReader();
-                dirReader.readEntries(entries => {
-                    let remainingEntries = entries.length;
-                    if (remainingEntries === 0) {
-                        callback();
-                    }
-                    entries.forEach(entry => {
-                        traverseFileTree(entry, files, () => {
-                            remainingEntries--;
-                            if (remainingEntries === 0) {
-                                callback();
-                            }
-                        });
+            })
+            .catch(error => console.error('Error:', error));
+
+        // 審査実行
+        document.getElementById('submitBtn').addEventListener('click', function() {
+            const adText = document.getElementById('adText').value;
+            if (!adText) {
+                alert('広告テキストを入力してください');
+                return;
+            }
+
+            // ボタンを無効化し、ローディング表示
+            this.disabled = true;
+            this.textContent = '審査中...';
+
+            fetch('/api/review', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    text: adText,
+                    risk_score: 50
+                })
+            })
+            .then(response => response.json())
+            .then(result => {
+                // 結果の表示
+                document.getElementById('resultCard').style.display = 'block';
+                document.getElementById('judgement').textContent = result.judgement;
+                document.getElementById('reason').textContent = result.reason;
+                document.getElementById('riskScore').textContent = result.risk_score;
+
+                // 判定結果に応じてアラートの色を変更
+                const alertElement = document.getElementById('judgementAlert');
+                alertElement.className = 'alert ' + (
+                    result.judgement === '承認' ? 'alert-success' :
+                    result.judgement === '要確認' ? 'alert-warning' :
+                    'alert-danger'
+                );
+
+                // 違反項目の表示
+                const violationsSection = document.getElementById('violationsSection');
+                const violationsList = document.getElementById('violationsList');
+                violationsList.innerHTML = '';
+                
+                if (result.violations && result.violations.length > 0) {
+                    violationsSection.style.display = 'block';
+                    result.violations.forEach(violation => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item list-group-item-danger';
+                        li.textContent = violation;
+                        violationsList.appendChild(li);
                     });
-                });
-            }
-        }
-
-        function handleFiles(e) {
-            const files = [...e.target.files].filter(file => file.type.startsWith('image/'));
-            if (files.length === 0) return;
-
-            processFiles(files);
-        }
-
-        function processFiles(files) {
-            // プレビューエリアとテーブルをクリア
-            previewArea.innerHTML = '';
-            resultsTable.innerHTML = '';
-            downloadCsvBtn.disabled = true;
-
-            // プログレスバーを表示
-            uploadProgress.classList.remove('d-none');
-            uploadProgress.querySelector('.progress-bar').style.width = '0%';
-
-            // ファイル数を表示
-            const totalFiles = files.length;
-            const statusDiv = document.createElement('div');
-            statusDiv.className = 'alert alert-info mt-3';
-            statusDiv.innerHTML = `処理対象: ${totalFiles}個の画像ファイル`;
-            previewArea.parentElement.insertBefore(statusDiv, previewArea);
-
-            const formData = new FormData();
-            files.forEach(file => {
-                formData.append('files[]', file);
-                addPreview(file);
-            });
-
-            uploadFiles(formData, totalFiles);
-        }
-
-        function addPreview(file) {
-            const reader = new FileReader();
-            reader.onloadend = function() {
-                const div = document.createElement('div');
-                div.className = 'preview-card position-relative';
-                div.innerHTML = `
-                    <img src="${reader.result}" class="preview-image" alt="${file.name}">
-                    <div class="mt-2 text-center small">${file.name}</div>
-                    <span class="status-badge badge bg-secondary">処理中...</span>
-                `;
-                previewArea.appendChild(div);
-            }
-            reader.readAsDataURL(file);
-        }
-
-        async function uploadFiles(formData, totalFiles) {
-            try {
-                loadingOverlay.style.display = 'flex';
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Upload failed');
+                } else {
+                    violationsSection.style.display = 'none';
                 }
 
-                const data = await response.json();
-                updateResults(data.files);
-                
-                if (data.results_file) {
-                    downloadCsvBtn.disabled = false;
-                    downloadCsvBtn.onclick = () => {
-                        const filename = data.results_file.split('/').pop();
-                        const timestamp = filename.replace('results_', '').replace('.json', '');
-                        window.location.href = `/download_csv/${timestamp}`;
-                    };
-                }
-
-                // 処理完了メッセージを表示
-                const statusDiv = document.createElement('div');
-                statusDiv.className = 'alert alert-success mt-3';
-                statusDiv.innerHTML = `処理完了: ${data.files.length}個の画像を審査しました`;
-                previewArea.parentElement.insertBefore(statusDiv, previewArea);
-            } catch (error) {
+                // 関連ガイドラインの表示
+                const relevantGuidelines = document.getElementById('relevantGuidelines');
+                relevantGuidelines.innerHTML = '';
+                result.relevant_guidelines.forEach(guideline => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item';
+                    li.textContent = guideline.content;
+                    relevantGuidelines.appendChild(li);
+                });
+            })
+            .catch(error => {
                 console.error('Error:', error);
-                alert('アップロードに失敗しました。');
-            } finally {
-                loadingOverlay.style.display = 'none';
-                uploadProgress.classList.add('d-none');
-            }
-        }
-
-        function updateResults(files) {
-            resultsTable.innerHTML = '';
-            const previews = previewArea.querySelectorAll('.preview-card');
-
-            // 結果の概要を計算
-            const summary = files.reduce((acc, file) => {
-                acc[file.review.judgement] = (acc[file.review.judgement] || 0) + 1;
-                return acc;
-            }, {});
-
-            // 概要行を追加
-            const summaryRow = resultsTable.insertRow();
-            summaryRow.className = 'table-info';
-            summaryRow.innerHTML = `
-                <td colspan="5">
-                    <strong>審査結果概要:</strong>
-                    承認: ${summary['承認'] || 0}件,
-                    保留: ${summary['保留'] || 0}件,
-                    却下: ${summary['却下'] || 0}件
-                    （全${files.length}件）
-                </td>
-            `;
-
-            // 個別の結果を表示
-            files.forEach((file, index) => {
-                const row = resultsTable.insertRow();
-                row.innerHTML = `
-                    <td>${file.filename}</td>
-                    <td>${file.review.judgement}</td>
-                    <td>${file.review.reason}</td>
-                    <td>${file.review.risk_score.toFixed(1)}</td>
-                    <td>${file.review.violations.join(', ') || '-'}</td>
-                `;
-
-                // プレビューのステータスバッジを更新
-                if (previews[index]) {
-                    const badge = previews[index].querySelector('.status-badge');
-                    badge.className = `status-badge badge bg-${getBadgeColor(file.review.judgement)}`;
-                    badge.textContent = file.review.judgement;
-                }
+                alert('エラーが発生しました: ' + error);
+            })
+            .finally(() => {
+                // ボタンを再度有効化
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '審査開始';
             });
-        }
-
-        function getBadgeColor(judgement) {
-            switch (judgement) {
-                case '承認': return 'success';
-                case '保留': return 'warning';
-                case '却下': return 'danger';
-                default: return 'secondary';
-            }
-        }
+        });
     </script>
 </body>
 </html>

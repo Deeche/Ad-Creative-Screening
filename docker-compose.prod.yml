@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "51473:51473"
+    volumes:
+      - ./backend:/app/backend
+      - ./static:/app/static
+      - ./templates:/app/templates
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - FLASK_ENV=production
+    command: python app.py 
