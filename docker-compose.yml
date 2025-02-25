@@ -2,10 +2,23 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     volumes:
       - ./backend:/app/backend
       - ./data:/app/data
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - ./credentials:/app/credentials
+      - ./app.py:/app/app.py
+      - pip_cache:/root/.cache/pip
     environment:
       - PYTHONPATH=/app
-    command: python -m unittest backend/test_rag_system.py -v 
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/ad-creative-screening-67985e10c506.json
+    ports:
+      - "51473:51473"
+    command: python app.py
+
+volumes:
+  pip_cache: 

@@ -11,3 +11,5 @@ langchain-community
 langchain-core
 sentence-transformers
 pydantic
+google-cloud-aiplatform
+google-auth

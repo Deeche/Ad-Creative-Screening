@@ -10,7 +10,9 @@ services:
       - ./static:/app/static
       - ./templates:/app/templates
       - ./data:/app/data
+      - ./credentials:/app/credentials
     environment:
       - PYTHONPATH=/app
       - FLASK_ENV=production
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/ad-creative-screening-67985e10c506.json
     command: python app.py 
