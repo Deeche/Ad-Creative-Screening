@@ -131,13 +131,28 @@
                     risk_score: 50
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(result => {
+                if (!result) {
+                    throw new Error('審査結果が取得できませんでした');
+                }
+
                 // 結果の表示
                 document.getElementById('resultCard').style.display = 'block';
-                document.getElementById('judgement').textContent = result.judgement;
-                document.getElementById('reason').textContent = result.reason;
-                document.getElementById('riskScore').textContent = result.risk_score;
+                
+                // エラーチェック
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                document.getElementById('judgement').textContent = result.judgement || '判定不可';
+                document.getElementById('reason').textContent = result.reason || '理由不明';
+                document.getElementById('riskScore').textContent = result.risk_score || 'N/A';
 
                 // 判定結果に応じてアラートの色を変更
                 const alertElement = document.getElementById('judgementAlert');
@@ -152,9 +167,9 @@
                 const violationsList = document.getElementById('violationsList');
                 violationsList.innerHTML = '';
                 
-                if (result.potential_violations && result.potential_violations.length > 0) {
+                if (result.violations && result.violations.length > 0) {
                     violationsSection.style.display = 'block';
-                    result.potential_violations.forEach(violation => {
+                    result.violations.forEach(violation => {
                         const li = document.createElement('li');
                         li.className = 'list-group-item list-group-item-danger';
                         li.textContent = violation;
@@ -193,7 +208,17 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('エラーが発生しました: ' + error);
+                document.getElementById('resultCard').style.display = 'block';
+                document.getElementById('judgement').textContent = 'エラー';
+                document.getElementById('reason').textContent = error.message;
+                document.getElementById('riskScore').textContent = 'N/A';
+                
+                const alertElement = document.getElementById('judgementAlert');
+                alertElement.className = 'alert alert-danger';
+                
+                // エラー時は違反項目と改善提案を非表示
+                document.getElementById('violationsSection').style.display = 'none';
+                document.getElementById('improvementsSection').style.display = 'none';
             })
             .finally(() => {
                 // ボタンを再度有効化

@@ -1,9 +1,10 @@
 import json
-from .rag_system import AdGuidelineRAG
+import asyncio
+from .workflow.ad_review_workflow import AdReviewWorkflow
 
 class AdReviewer:
     def __init__(self):
-        self.rag_system = AdGuidelineRAG()
+        self.workflow = AdReviewWorkflow()
     
     def review_ad(self, analysis_result):
         """
@@ -18,39 +19,56 @@ class AdReviewer:
         try:
             # テキストの取得
             text = analysis_result.get('text', '')
+            if not text:
+                return {
+                    "error": "広告テキストが空です",
+                    "judgement": "判定不可",
+                    "reason": "広告テキストが提供されていません",
+                    "risk_score": 0,
+                    "violations": [],
+                    "improvements": [],
+                    "relevant_guidelines": []
+                }
             
-            # RAGシステムを使用してガイドライン違反をチェック
-            rag_analysis = self.rag_system.analyze_ad_content(text)
-            potential_violations = rag_analysis["potential_violations"]
+            # 非同期関数を同期的に実行
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
             
-            # 違反の重大度に基づいてリスクスコアを計算
-            violation_score = len(potential_violations) * 20
-            base_score = analysis_result.get('risk_score', 50)
-            final_score = base_score + violation_score
-            final_score = min(100, max(0, final_score))
+            review_result = loop.run_until_complete(
+                self.workflow.review_ad(text)
+            )
             
-            # 判定とその理由を決定
-            if final_score < 30:
-                judgement = "承認"
-                reason = "重大な違反は検出されませんでした"
-            elif final_score < 70:
-                judgement = "要確認"
-                reason = "潜在的な違反が検出されました"
-            else:
-                judgement = "却下"
-                reason = "重大な違反が検出されました"
+            if review_result is None:
+                return {
+                    "error": "審査処理中にエラーが発生しました",
+                    "judgement": "判定不可",
+                    "reason": "システムエラーが発生しました",
+                    "risk_score": 0,
+                    "violations": [],
+                    "improvements": [],
+                    "relevant_guidelines": []
+                }
             
-            # 審査結果の作成
-            result = {
-                "judgement": judgement,
-                "reason": reason,
-                "risk_score": final_score,
-                "violations": [v["content"] for v in potential_violations],
-                "relevant_guidelines": rag_analysis["relevant_guidelines"]
+            return {
+                "judgement": review_result["judgement"],
+                "reason": review_result["reason"],
+                "risk_score": review_result.get("confidence", 50),
+                "violations": review_result.get("violations", []),
+                "improvements": review_result.get("improvements", []),
+                "relevant_guidelines": review_result.get("relevant_guidelines", [])
             }
-            
-            return result
             
         except Exception as e:
             print(f"Error in review_ad: {e}")
-            return None
+            return {
+                "error": str(e),
+                "judgement": "判定不可",
+                "reason": f"エラーが発生しました: {str(e)}",
+                "risk_score": 0,
+                "violations": [],
+                "improvements": [],
+                "relevant_guidelines": []
+            }

@@ -9,7 +9,12 @@ numpy
 chromadb
 langchain-community
 langchain-core
+langchain-chroma
 sentence-transformers
 pydantic
 google-cloud-aiplatform
 google-auth
+langgraph
+langchain-google-vertexai
+langchain-huggingface
+pytest

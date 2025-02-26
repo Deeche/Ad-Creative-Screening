@@ -13,12 +13,18 @@ services:
       - ./credentials:/app/credentials
       - ./app.py:/app/app.py
       - pip_cache:/root/.cache/pip
+      - build_cache:/var/cache/buildkit
     environment:
       - PYTHONPATH=/app
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/ad-creative-screening-67985e10c506.json
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
     ports:
       - "51473:51473"
     command: python app.py
 
 volumes:
-  pip_cache: 
+  pip_cache:
+    name: pip_cache
+  build_cache:
+    name: build_cache 

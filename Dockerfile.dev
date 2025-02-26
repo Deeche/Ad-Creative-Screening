@@ -1,25 +1,31 @@
-FROM python:3.9-slim as builder
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
 # システムの依存関係をインストール
-RUN apt-get update && apt-get install -y \
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # 依存関係のインストールを分離
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
 # builderステージからPythonパッケージをコピー
-COPY --from=builder /usr/local/lib/python3.9/site-packages/ /usr/local/lib/python3.9/site-packages/
+COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 
 # 開発用の設定
 ENV FLASK_ENV=development
 ENV FLASK_DEBUG=1
+ENV PYTHONPATH=/app
+
+# アプリケーションコードは開発時にはボリュームマウントで提供されるため、
+# ここではコピーしない
 
 CMD ["python", "app.py"] 
