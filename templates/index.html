@@ -14,6 +14,14 @@
             margin-top: 20px;
             margin-bottom: 20px;
         }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -48,14 +56,43 @@
             </ul>
         </div>
 
-        <!-- 広告入力フォーム -->
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">広告テキストの入力</h5>
-                <div class="form-group">
-                    <textarea id="adText" class="form-control" rows="4" placeholder="ここに広告テキストを入力してください"></textarea>
+        <!-- タブ -->
+        <ul class="nav nav-tabs" id="adTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="text-tab" data-bs-toggle="tab" data-bs-target="#text" type="button" role="tab">テキスト広告</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="banner-tab" data-bs-toggle="tab" data-bs-target="#banner" type="button" role="tab">バナー広告</button>
+            </li>
+        </ul>
+
+        <!-- タブコンテンツ -->
+        <div class="tab-content" id="adTabsContent">
+            <!-- テキスト広告タブ -->
+            <div class="tab-pane fade show active" id="text" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">広告テキストの入力</h5>
+                        <div class="form-group">
+                            <textarea id="adText" class="form-control" rows="4" placeholder="ここに広告テキストを入力してください"></textarea>
+                        </div>
+                        <button id="submitTextBtn" class="btn btn-primary mt-3">審査開始</button>
+                    </div>
                 </div>
-                <button id="submitBtn" class="btn btn-primary mt-3">審査開始</button>
+            </div>
+
+            <!-- バナー広告タブ -->
+            <div class="tab-pane fade" id="banner" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">バナー広告のアップロード</h5>
+                        <div class="form-group">
+                            <input type="file" id="bannerFile" class="form-control" accept=".png,.jpg,.jpeg,.gif">
+                            <div id="imagePreview"></div>
+                        </div>
+                        <button id="submitBannerBtn" class="btn btn-primary mt-3">審査開始</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -63,6 +100,27 @@
         <div id="resultCard" class="card result-card">
             <div class="card-body">
                 <h5 class="card-title">審査結果</h5>
+                
+                <!-- テキスト抽出結果（バナー広告の場合） -->
+                <div id="extractedTextSection" style="display: none;">
+                    <h6>抽出されたテキスト：</h6>
+                    <p id="extractedText" class="border p-2"></p>
+                </div>
+
+                <!-- 画像分析結果（バナー広告の場合） -->
+                <div id="imageAnalysisSection" style="display: none;">
+                    <h6>画像分析結果：</h6>
+                    <div class="mb-3">
+                        <strong>全体的な印象：</strong>
+                        <p id="overallImpression"></p>
+                    </div>
+                    <div class="mb-3">
+                        <strong>視覚要素の評価：</strong>
+                        <ul id="visualElements" class="list-group">
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="alert" id="judgementAlert" role="alert">
                     <strong>判定：</strong> <span id="judgement"></span>
                 </div>
@@ -109,15 +167,27 @@
             })
             .catch(error => console.error('Error:', error));
 
-        // 審査実行
-        document.getElementById('submitBtn').addEventListener('click', function() {
+        // 画像プレビュー
+        document.getElementById('bannerFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const preview = document.getElementById('imagePreview');
+                    preview.innerHTML = `<img src="${e.target.result}" class="preview-image">`;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // テキスト広告の審査
+        document.getElementById('submitTextBtn').addEventListener('click', function() {
             const adText = document.getElementById('adText').value;
             if (!adText) {
                 alert('広告テキストを入力してください');
                 return;
             }
 
-            // ボタンを無効化し、ローディング表示
             this.disabled = true;
             this.textContent = '審査中...';
 
@@ -137,96 +207,168 @@
                 }
                 return response.json();
             })
-            .then(result => {
-                if (!result) {
-                    throw new Error('審査結果が取得できませんでした');
+            .then(result => displayResults(result, false))
+            .catch(error => handleError(error))
+            .finally(() => {
+                this.disabled = false;
+                this.textContent = '審査開始';
+            });
+        });
+
+        // バナー広告の審査
+        document.getElementById('submitBannerBtn').addEventListener('click', function() {
+            const fileInput = document.getElementById('bannerFile');
+            if (!fileInput.files[0]) {
+                alert('ファイルを選択してください');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            this.disabled = true;
+            this.textContent = '審査中...';
+
+            fetch('/api/analyze_banner', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(result => displayResults(result, true))
+            .catch(error => handleError(error))
+            .finally(() => {
+                this.disabled = false;
+                this.textContent = '審査開始';
+            });
+        });
+
+        // 結果の表示
+        function displayResults(result, isBanner) {
+            document.getElementById('resultCard').style.display = 'block';
+            
+            // エラーチェック
+            if (result.error) {
+                throw new Error(result.error);
+            }
+
+            // バナー広告の場合の追加表示
+            if (isBanner) {
+                // 抽出テキストの表示
+                const extractedTextSection = document.getElementById('extractedTextSection');
+                if (result.text_content) {
+                    extractedTextSection.style.display = 'block';
+                    document.getElementById('extractedText').textContent = result.text_content;
+                } else {
+                    extractedTextSection.style.display = 'none';
                 }
 
-                // 結果の表示
-                document.getElementById('resultCard').style.display = 'block';
-                
-                // エラーチェック
-                if (result.error) {
-                    throw new Error(result.error);
-                }
-
-                document.getElementById('judgement').textContent = result.judgement || '判定不可';
-                document.getElementById('reason').textContent = result.reason || '理由不明';
-                document.getElementById('riskScore').textContent = result.risk_score || 'N/A';
-
-                // 判定結果に応じてアラートの色を変更
-                const alertElement = document.getElementById('judgementAlert');
-                alertElement.className = 'alert ' + (
-                    result.judgement === '承認' ? 'alert-success' :
-                    result.judgement === '要確認' ? 'alert-warning' :
-                    'alert-danger'
-                );
-
-                // 違反項目の表示
-                const violationsSection = document.getElementById('violationsSection');
-                const violationsList = document.getElementById('violationsList');
-                violationsList.innerHTML = '';
-                
-                if (result.violations && result.violations.length > 0) {
-                    violationsSection.style.display = 'block';
-                    result.violations.forEach(violation => {
+                // 画像分析結果の表示
+                const imageAnalysisSection = document.getElementById('imageAnalysisSection');
+                if (result.image_analysis) {
+                    imageAnalysisSection.style.display = 'block';
+                    document.getElementById('overallImpression').textContent = result.image_analysis.overall_impression;
+                    
+                    const visualElements = document.getElementById('visualElements');
+                    visualElements.innerHTML = '';
+                    const elements = result.image_analysis.visual_elements;
+                    Object.entries(elements).forEach(([key, value]) => {
                         const li = document.createElement('li');
-                        li.className = 'list-group-item list-group-item-danger';
-                        li.textContent = violation;
-                        violationsList.appendChild(li);
+                        li.className = 'list-group-item';
+                        li.textContent = `${key}: ${value}`;
+                        visualElements.appendChild(li);
                     });
                 } else {
-                    violationsSection.style.display = 'none';
+                    imageAnalysisSection.style.display = 'none';
                 }
 
-                // 関連ガイドラインの表示
-                const relevantGuidelines = document.getElementById('relevantGuidelines');
-                relevantGuidelines.innerHTML = '';
+                // テキスト審査結果がある場合はそれを表示
+                if (result.text_review) {
+                    result = result.text_review;
+                }
+            }
+
+            // 共通の結果表示
+            document.getElementById('judgement').textContent = result.judgement || '判定不可';
+            document.getElementById('reason').textContent = result.reason || '理由不明';
+            document.getElementById('riskScore').textContent = result.risk_score || 'N/A';
+
+            // 判定結果に応じてアラートの色を変更
+            const alertElement = document.getElementById('judgementAlert');
+            alertElement.className = 'alert ' + (
+                result.judgement === '承認' ? 'alert-success' :
+                result.judgement === '要確認' ? 'alert-warning' :
+                'alert-danger'
+            );
+
+            // 違反項目の表示
+            const violationsSection = document.getElementById('violationsSection');
+            const violationsList = document.getElementById('violationsList');
+            violationsList.innerHTML = '';
+            
+            if (result.violations && result.violations.length > 0) {
+                violationsSection.style.display = 'block';
+                result.violations.forEach(violation => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item list-group-item-danger';
+                    li.textContent = violation;
+                    violationsList.appendChild(li);
+                });
+            } else {
+                violationsSection.style.display = 'none';
+            }
+
+            // 関連ガイドラインの表示
+            const relevantGuidelines = document.getElementById('relevantGuidelines');
+            relevantGuidelines.innerHTML = '';
+            if (result.relevant_guidelines) {
                 result.relevant_guidelines.forEach(guideline => {
                     const li = document.createElement('li');
                     li.className = 'list-group-item';
                     li.textContent = guideline.content;
                     relevantGuidelines.appendChild(li);
                 });
+            }
 
-                // 改善提案の表示
-                const improvementsSection = document.getElementById('improvementsSection');
-                const improvementsList = document.getElementById('improvementsList');
-                improvementsList.innerHTML = '';
+            // 改善提案の表示
+            const improvementsSection = document.getElementById('improvementsSection');
+            const improvementsList = document.getElementById('improvementsList');
+            improvementsList.innerHTML = '';
 
-                if (result.improvements && result.improvements.length > 0) {
-                    improvementsSection.style.display = 'block';
-                    result.improvements.forEach(improvement => {
-                        const li = document.createElement('li');
-                        li.className = 'list-group-item list-group-item-info';
-                        li.textContent = improvement;
-                        improvementsList.appendChild(li);
-                    });
-                } else {
-                    improvementsSection.style.display = 'none';
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                document.getElementById('resultCard').style.display = 'block';
-                document.getElementById('judgement').textContent = 'エラー';
-                document.getElementById('reason').textContent = error.message;
-                document.getElementById('riskScore').textContent = 'N/A';
-                
-                const alertElement = document.getElementById('judgementAlert');
-                alertElement.className = 'alert alert-danger';
-                
-                // エラー時は違反項目と改善提案を非表示
-                document.getElementById('violationsSection').style.display = 'none';
-                document.getElementById('improvementsSection').style.display = 'none';
-            })
-            .finally(() => {
-                // ボタンを再度有効化
-                const submitBtn = document.getElementById('submitBtn');
-                submitBtn.disabled = false;
-                submitBtn.textContent = '審査開始';
-            });
-        });
+            if (result.improvements && result.improvements.length > 0) {
+                improvementsSection.style.display = 'block';
+                result.improvements.forEach(improvement => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item list-group-item-info';
+                    li.textContent = improvement;
+                    improvementsList.appendChild(li);
+                });
+            } else {
+                improvementsSection.style.display = 'none';
+            }
+        }
+
+        // エラーハンドリング
+        function handleError(error) {
+            console.error('Error:', error);
+            document.getElementById('resultCard').style.display = 'block';
+            document.getElementById('judgement').textContent = 'エラー';
+            document.getElementById('reason').textContent = error.message;
+            document.getElementById('riskScore').textContent = 'N/A';
+            
+            const alertElement = document.getElementById('judgementAlert');
+            alertElement.className = 'alert alert-danger';
+            
+            // エラー時は違反項目と改善提案を非表示
+            document.getElementById('violationsSection').style.display = 'none';
+            document.getElementById('improvementsSection').style.display = 'none';
+            document.getElementById('extractedTextSection').style.display = 'none';
+            document.getElementById('imageAnalysisSection').style.display = 'none';
+        }
     </script>
 </body>
 </html>

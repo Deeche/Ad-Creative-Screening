@@ -288,6 +288,51 @@ def delete_document(doc_path):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/analyze_banner', methods=['POST'])
+def analyze_banner():
+    """バナー広告の分析を実行"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '画像ファイルが提供されていません'}), 400
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'ファイルが選択されていません'}), 400
+            
+        if not allowed_file(file.filename):
+            return jsonify({'error': '許可されていないファイル形式です'}), 400
+            
+        # ファイルの保存
+        result = save_file(file, app.config['UPLOAD_FOLDER'])
+        if not result['success']:
+            return jsonify({'error': 'ファイルの保存に失敗しました'}), 500
+            
+        # バナー広告の分析
+        analysis_result = image_analyzer.analyze_banner_ad(result['path'])
+        if not analysis_result['success']:
+            return jsonify({'error': analysis_result.get('error', '分析に失敗しました')}), 500
+            
+        # テキストの審査（テキストが抽出された場合）
+        if analysis_result['text_content']:
+            text_review = ad_reviewer.review_ad({
+                'text': analysis_result['text_content'],
+                'risk_score': 50
+            })
+        else:
+            text_review = None
+            
+        return jsonify({
+            'filename': result['filename'],
+            'path': result['path'],
+            'text_content': analysis_result['text_content'],
+            'image_analysis': analysis_result['image_analysis'],
+            'text_review': text_review
+        })
+            
+    except Exception as e:
+        logger.error(f'Error in analyze_banner: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # 必要なディレクトリの作成
     os.makedirs('static/uploads', exist_ok=True)

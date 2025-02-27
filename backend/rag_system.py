@@ -9,6 +9,9 @@ import vertexai
 from vertexai.generative_models import GenerativeModel
 from google.oauth2 import service_account
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer, util
+import numpy as np
+from backend.document_manager import DocumentManager
 
 class AdGuidelineRAG:
     def __init__(self):
@@ -37,6 +40,13 @@ class AdGuidelineRAG:
             length_function=len,
         )
         self._initialize_vector_store()
+
+        # 日本語に特化したモデルを使用
+        self.model = SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')
+        self.document_manager = DocumentManager()
+        self.guidelines = []
+        self.guideline_embeddings = None
+        self._initialize_guidelines()
 
     def _initialize_vector_store(self):
         # ガイドラインのサンプルデータ
@@ -69,59 +79,72 @@ class AdGuidelineRAG:
             persist_directory="./data/chroma_db"
         )
 
+    def _initialize_guidelines(self):
+        """ガイドラインの初期化とembeddingの計算"""
+        # ガイドラインの読み込み
+        for doc in self.document_manager.get_document_list():
+            if doc['category'] == 'guidelines':
+                content = self.document_manager.get_document_content(doc['path'])
+                if content:
+                    # ガイドラインを行単位で分割
+                    lines = [line.strip() for line in content.split('\n')
+                            if line.strip() and not line.startswith('#')]
+                    self.guidelines.extend(lines)
+
+        # ガイドラインのembeddingを計算
+        if self.guidelines:
+            self.guideline_embeddings = self.model.encode(
+                self.guidelines,
+                convert_to_tensor=True,
+                show_progress_bar=False
+            )
+
     def search_relevant_guidelines(self, query: str, k: int = 3) -> List[Dict]:
-        """
-        広告コンテンツに関連するガイドラインを検索します。
+        """関連するガイドラインを検索"""
+        if not self.guidelines or self.guideline_embeddings is None:
+            return []
+
+        # クエリのembeddingを計算
+        query_embedding = self.model.encode(
+            query,
+            convert_to_tensor=True,
+            show_progress_bar=False
+        )
+
+        # コサイン類似度を計算
+        cos_scores = util.cos_sim(query_embedding, self.guideline_embeddings)[0]
         
-        Args:
-            query: 検索クエリ（広告コンテンツの説明など）
-            k: 返す結果の数
-            
-        Returns:
-            関連するガイドラインのリスト
-        """
-        if not self.vector_store:
-            raise ValueError("Vector store has not been initialized")
-            
-        results = self.vector_store.similarity_search_with_relevance_scores(query, k=k)
-        return [
-            {
-                "content": doc.page_content,
-                "score": score
-            }
-            for doc, score in results
-        ]
+        # 上位k件の結果を取得
+        top_results = []
+        top_k_idx = np.argsort(cos_scores.numpy())[-k:][::-1]
+        
+        for idx in top_k_idx:
+            score = cos_scores[idx].item()
+            if score > 0.3:  # スコアが一定以上の場合のみ
+                top_results.append({
+                    'content': self.guidelines[idx],
+                    'score': score
+                })
+
+        return top_results
 
     def _generate_fallback_response(self, relevant_guidelines: List[Dict]) -> Dict:
-        """LLM分析が失敗した場合のフォールバックレスポンスを生成"""
-        violations = [
-            f"ガイドライン違反の可能性: {guideline['content']}"
-            for guideline in relevant_guidelines
-            if guideline["score"] > 0.8
-        ]
-        
-        violation_score = len(violations) * 20
-        if violation_score > 60:
-            judgement = "却下"
-            reason = "重大なガイドライン違反が検出されました"
-        elif violation_score > 30:
-            judgement = "要確認"
-            reason = "潜在的なガイドライン違反が検出されました"
-        else:
-            judgement = "承認"
-            reason = "重大な違反は検出されませんでした"
+        """フォールバックレスポンスの生成"""
+        if not relevant_guidelines:
+            return {
+                "judgement": "要確認",
+                "reason": "ガイドラインとの照合ができませんでした",
+                "violations": [],
+                "improvements": ["広告内容の詳細な確認を推奨します"],
+                "relevant_guidelines": []
+            }
 
         return {
-            "has_violations": len(violations) > 0,
-            "violation_score": min(100, violation_score),
-            "violations": violations,
-            "improvements": [
-                "具体的な数値や根拠を示してください",
-                "誇大な表現を避けてください",
-                "条件や制限事項を明確に記載してください"
-            ],
-            "judgement": judgement,
-            "reason": reason
+            "judgement": "要確認",
+            "reason": "ガイドラインの確認が必要です",
+            "violations": [],
+            "improvements": ["関連するガイドラインに基づいて内容を確認してください"],
+            "relevant_guidelines": relevant_guidelines
         }
 
     def analyze_with_llm(self, ad_content: str, relevant_guidelines: List[Dict]) -> Dict:
@@ -194,45 +217,52 @@ class AdGuidelineRAG:
             return self._generate_fallback_response(relevant_guidelines)
 
     def analyze_ad_content(self, ad_content: str) -> Dict:
-        """
-        広告コンテンツを分析し、関連するガイドラインと違反の可能性を評価します。
-        
-        Args:
-            ad_content: 分析する広告コンテンツ
-            
-        Returns:
-            分析結果を含む辞書
-        """
+        """広告コンテンツの分析"""
         try:
-            # 関連ガイドラインの検索
+            # 関連するガイドラインを検索
             relevant_guidelines = self.search_relevant_guidelines(ad_content)
             
-            # LLMによる詳細分析
-            llm_analysis = self.analyze_with_llm(ad_content, relevant_guidelines)
+            # 違反の重大度を判定
+            severity = "Low"
+            violations = []
             
+            for guideline in relevant_guidelines:
+                if guideline['score'] > 0.7:  # 高い類似度の場合
+                    severity = "High"
+                    violations.append({
+                        "guideline": guideline['content'],
+                        "score": guideline['score']
+                    })
+                elif guideline['score'] > 0.5:  # 中程度の類似度の場合
+                    if severity != "High":
+                        severity = "Medium"
+                    violations.append({
+                        "guideline": guideline['content'],
+                        "score": guideline['score']
+                    })
+
+            # 判定結果の生成
+            if severity == "High":
+                judgement = "却下"
+                reason = "重大なガイドライン違反の可能性があります"
+            elif severity == "Medium":
+                judgement = "要確認"
+                reason = "ガイドラインとの整合性の確認が必要です"
+            else:
+                judgement = "承認"
+                reason = "特に問題は検出されませんでした"
+
             return {
-                "ad_content": ad_content,
-                "relevant_guidelines": relevant_guidelines,
-                "analysis": llm_analysis,
-                "potential_violations": llm_analysis["violations"],
-                "judgement": llm_analysis["judgement"],
-                "reason": llm_analysis["reason"],
-                "risk_score": llm_analysis["violation_score"],
-                "improvements": llm_analysis["improvements"]
+                "judgement": judgement,
+                "reason": reason,
+                "violations": violations,
+                "improvements": [
+                    "検出された違反に基づいて広告内容を修正してください" if violations else
+                    "現状の内容で問題ありません"
+                ],
+                "relevant_guidelines": relevant_guidelines
             }
-            
+
         except Exception as e:
             print(f"Error in analyze_ad_content: {e}")
-            fallback = self._generate_fallback_response(
-                self.search_relevant_guidelines(ad_content)
-            )
-            return {
-                "ad_content": ad_content,
-                "relevant_guidelines": relevant_guidelines,
-                "analysis": fallback,
-                "potential_violations": fallback["violations"],
-                "judgement": fallback["judgement"],
-                "reason": fallback["reason"],
-                "risk_score": fallback["violation_score"],
-                "improvements": fallback["improvements"]
-            } 
+            return self._generate_fallback_response([]) 

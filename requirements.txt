@@ -3,7 +3,6 @@ flask-cors
 pillow
 python-dotenv
 langchain
-easyocr
 pandas
 numpy
 chromadb
@@ -18,3 +17,7 @@ langgraph
 langchain-google-vertexai
 langchain-huggingface
 pytest
+opencv-python-headless
+transformers
+torch
+torchvision
